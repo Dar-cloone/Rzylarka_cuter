@@ -16,7 +16,12 @@ static void hCut(float){ fsmCut(0); }
 static void hGlue(float p){ fsmGlue(p); }
 
 struct Handler { uint8_t code; void(*fn)(float); };
-static const Handler tbl[] = { {0x01,hHome},{0x02,hGoto},{0x03,hCut},{0x04,hGlue} };
+static const Handler tbl[] = {
+    {0x01, hHome},
+    {0x02, hGoto},
+    {0x03, hCut},
+    {0x04, hGlue}
+};
 constexpr uint8_t N = sizeof(tbl)/sizeof(tbl[0]);
 
 /* --------- I²C ISR --------- */
@@ -30,13 +35,16 @@ static void onReceive(int n)
         for(uint8_t i=0;i<4;i++) u.b[i]=Wire.read();
         gParam = u.f;
     } else {
-        gParam = 0.0f;                        // sygnały chwytaka, SET/GET, …
+        gParam = 0.0f;                        // SET/GET/ew. sygnały (nieobsługiwane już)
     }
     gPend   = true;
     gStatus = S_BUSY;                         // natychmiastowe ACK
 }
 
-static void onRequest(){ Wire.write(gStatus); }
+static void onRequest(){
+    Wire.write(gStatus);
+    if (gStatus == S_DONE) gStatus = S_IDLE;  // Po odczycie DONE przez mastera wróć na IDLE
+}
 
 /* --------- INIT --------- */
 void bridgeInit(uint8_t addr)
@@ -50,10 +58,6 @@ void bridgeInit(uint8_t addr)
 static void dispatch()
 {
     if(!gPend) return;
-
-    /* --- sygnały chwytaka --- */
-    if(gCmd==0x11){ fsmGripOk();    gPend=false; return; }
-    if(gCmd==0x12){ fsmGripReady(); gPend=false; return; }
 
     /* --- SET_PARAM (0x50) --- */
     if(gCmd==0x50){
@@ -105,7 +109,8 @@ void bridgeUpdate()
 
     if     (fsmError()) gStatus = S_ERR;
     else if(fsmBusy())  gStatus = S_BUSY;
-    else                gStatus = S_IDLE;
+    else if (gStatus == S_BUSY) gStatus = S_DONE;  // zakończenie zadania → S_DONE
+    // S_DONE pozostaje aż master odczyta i przełączy na IDLE
 }
 
 uint8_t bridgeStatus(){ return gStatus; }
