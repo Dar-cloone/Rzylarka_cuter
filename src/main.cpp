@@ -1,25 +1,39 @@
-#include <Arduino.h>           // watchdogEnable / watchdogReset
-#include "comm/i2c_bridge.h"
-#include "machine_fsm/machine_fsm.h"
+#include <Wire.h>
+#include <Arduino.h>
 
-void setup()
-{
-    fsmInit();                 // inicjalizacja wszystkich modułów
-    bridgeInit(0x12);          // adres I²C tego slave’a (0x12 = 18 dec)
+volatile bool gotReceive = false;
+volatile bool gotRequest = false;
+volatile int  lastLen = 0;
 
-    /* ---------- sprzętowy WDT 2-sekundowy ---------- */
-    #ifdef watchdogEnable       // dostępne w core Renesas v1.4+
-        watchdogEnable(2000);   // 2000 ms
-    #endif
+void onReceive(int n) {
+    gotReceive = true;
+    lastLen = n;
+}
+void onRequest() {
+    gotRequest = true;
+    Wire.write(0xDD); // status DONE
 }
 
-void loop()
-{
-    bridgeUpdate();             // obsługa I²C (Rx/Tx + STATUS)
-    fsmUpdate(millis());        // serwis FSM i wszystkich sterowników
+void setup() {
+    Serial.begin(115200);
+    Wire.begin(0x12);
+    Wire.onReceive(onReceive);
+    Wire.onRequest(onRequest);
+    Serial.println("SLAVE: start, adres 0x12");
+    pinMode(LED_BUILTIN, OUTPUT);
+}
 
-    /* odśwież watchdog przy każdej iteracji */
-    #ifdef watchdogReset
-        watchdogReset();
-    #endif
+void loop() {
+    if (gotReceive) {
+        Serial.print("SLAVE: ODEBRANO RECEIVE z mastera! Długość: ");
+        Serial.println(lastLen);
+        digitalWrite(LED_BUILTIN, HIGH);
+        gotReceive = false;
+    }
+    if (gotRequest) {
+        Serial.println("SLAVE: MASTER PYTA O STATUS (onRequest) – wysyłam 0xDD");
+        digitalWrite(LED_BUILTIN, LOW);
+        gotRequest = false;
+    }
+    delay(10);
 }

@@ -15,7 +15,6 @@ void ufSensorInit()
 
 #ifdef UF_SENSOR_DEBUG
     Serial.begin(115200);
-    while (!Serial) { /* czekaj, aż port się otworzy */ }
     Serial.println(F("ms\tADC\tHIT"));
 #endif
 }
